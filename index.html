@@ -128,57 +128,82 @@ header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2p
 .spinner{width:18px;height:18px;border:3px solid var(--soft);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
-/* ── MAP FULLSCREEN mobile ── */
+/* ── MAP IMMERSIF mobile ── */
 @media(max-width:640px){
+  /* Le game-screen en mode carte devient une overlay plein écran */
   #game-screen.map-mode{
+    position:fixed !important;
+    inset:0;
+    top:0 !important; /* couvre aussi le header */
+    z-index:200;
     padding:0;gap:0;
+    background:var(--ocean);
+    display:flex !important; /* visible même sans .active */
+    overflow:hidden;
   }
   #game-screen.map-mode .game-inner{
-    max-width:100%;gap:0;
+    max-width:100%;height:100%;gap:0;
+    position:relative;overflow:hidden;
+    display:flex;flex-direction:column;
   }
-  /* Compact topbar */
+
+  /* Barre du haut flottante sombre */
   #game-screen.map-mode .game-top{
-    background:var(--ink);
-    padding:8px 12px;gap:8px;flex-wrap:nowrap;
+    position:relative;z-index:10;
+    background:rgba(15,25,35,.9);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    padding:10px 12px;gap:8px;flex-wrap:nowrap;flex-shrink:0;
   }
   #game-screen.map-mode .game-mode-label{color:white;font-size:13px;}
   #game-screen.map-mode .progress-wrap{color:rgba(255,255,255,.65);}
   #game-screen.map-mode .progress-bar{background:rgba(255,255,255,.2);}
-  #game-screen.map-mode .btn-back{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.9);font-size:11px;padding:4px 10px;}
-
-  /* Compact question */
-  #game-screen.map-mode .question-box{
-    border-left:none;border-right:none;border-top:none;
-    border-radius:0;box-shadow:none;
-    padding:10px 14px;
-    background:var(--paper);
+  #game-screen.map-mode .btn-back{
+    border-color:rgba(255,255,255,.4);color:white;
+    font-size:11px;padding:5px 10px;
   }
-  #game-screen.map-mode .question-text{font-size:15px;}
-  #game-screen.map-mode .question-hint{font-size:11px;}
 
-  /* Map takes max space — tall */
+  /* Question flottante compacte */
+  #game-screen.map-mode .question-box{
+    position:absolute;top:52px;left:10px;right:10px;z-index:10;
+    padding:10px 14px;
+    background:rgba(255,255,255,.95);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:2px solid var(--ink);border-radius:8px;
+    box-shadow:0 4px 20px rgba(0,0,0,.3);
+    flex-shrink:0;
+  }
+  #game-screen.map-mode .question-text{font-size:14px;margin-bottom:0;}
+  #game-screen.map-mode .question-hint{font-size:11px;margin-top:2px;}
+
+  /* Carte = tout l'espace restant */
   #game-screen.map-mode #map-wrap{
-    border-left:none;border-right:none;border-radius:0;box-shadow:none;
-    height:calc(100svh - 300px);
-    min-height:260px;
+    flex:1;
+    border:none;border-radius:0;box-shadow:none;
+    width:100%;height:100%;
+    overflow:hidden;
   }
   #game-screen.map-mode #map-wrap svg{
-    width:100%;height:100%;
+    width:100%;height:100%;display:block;
   }
 
-  /* Feedback compact */
+  /* Feedback ancré en bas, au-dessus du bouton */
   #game-screen.map-mode .feedback-banner{
-    border-left:none;border-right:none;border-radius:0;
+    position:absolute;bottom:58px;left:0;right:0;z-index:10;
+    border-radius:0;border-left:none;border-right:none;
     margin:0;
   }
+  #game-screen.map-mode .feedback-banner.show{display:flex;}
 
-  /* Next button full width, no margin */
+  /* Bouton suivant ancré tout en bas */
   #game-screen.map-mode .btn-next{
+    position:absolute;bottom:0;left:0;right:0;
+    width:100%;z-index:10;
     border-radius:0;margin:0;
+    padding:16px;
   }
 
-  /* Hide answers grid */
-  #game-screen.map-mode .answers-grid{display:none;}
+  /* Cacher la grille de réponses (la carte = le sélecteur) */
+  #game-screen.map-mode .answers-grid{display:none !important;}
 }
 
 #flag-display{display:flex;align-items:center;justify-content:center;padding:14px;}
@@ -462,9 +487,24 @@ const pick=(a,n)=>shuffle(a).slice(0,n);
 
 // ══ SCREENS ══════════════════════════════════════════════════════════
 function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  $(id).classList.add('active');
-  $('main-header').style.display=id==='login-screen'?'none':'flex';
+  // In map-mode on mobile, game-screen is a fixed overlay — handle separately
+  const isMapMode = $('game-screen').classList.contains('map-mode') && window.innerWidth<=640;
+
+  document.querySelectorAll('.screen').forEach(s=>{
+    // Don't touch game-screen display if it's the immersive map overlay
+    if(isMapMode && s.id==='game-screen') return;
+    s.classList.remove('active');
+  });
+
+  if(!(isMapMode && id==='game-screen')){
+    $(id).classList.add('active');
+  }
+
+  // Header: hide in login, hide behind map overlay too
+  const showHeader = id!=='login-screen' && !(isMapMode && id==='game-screen');
+  $('main-header').style.display = id==='login-screen' ? 'none' : 'flex';
+  // In immersive map mode, push header behind overlay
+  $('main-header').style.zIndex = isMapMode ? '10' : '50';
 }
 
 // ══ LOGIN ════════════════════════════════════════════════════════════
@@ -655,8 +695,9 @@ async function startGame(m){
   };
   questions=pick(COUNTRIES,10).map(c=>({correct:c,options:shuffle([c,...pick(sameRegion(c),3)])}));
   $('game-mode-label').textContent={map:'🗺️ Carte du Monde',flag:'🚩 Drapeaux',capital:'🏛️ Capitales'}[m];
-  // Toggle fullscreen map class
-  $('game-screen').classList.toggle('map-mode', m==='map');
+  // Set map-mode BEFORE showScreen so CSS is ready
+  if(m==='map') $('game-screen').classList.add('map-mode');
+  else $('game-screen').classList.remove('map-mode');
   showScreen('game-screen');
   if(m==='map'&&!worldTopo) await loadTopo();
   renderQ();
@@ -704,7 +745,8 @@ function drawMap(q){
     const wrap=$('map-wrap');
     const isMobile=window.innerWidth<=640;
     const W=Math.max(wrap.clientWidth||320, 320);
-    const H=isMobile ? wrap.clientHeight||Math.round(window.innerHeight*0.52) : Math.round(W*0.56);
+    // In immersive mode, map-wrap flex:1 fills remaining height
+    const H=isMobile ? Math.max(wrap.clientHeight||400, 300) : Math.round(W*0.56);
 
     const svg=d3.select('#world-svg')
       .attr('viewBox',`0 0 ${W} ${H}`)
@@ -846,6 +888,7 @@ function showStreak(n){
 
 async function showResults(){
   $('game-screen').classList.remove('map-mode');
+  $('main-header').style.zIndex='50';
   showScreen('result-screen');
   const p=Math.round(score/10*100);
   $('res-pct').textContent=p+'%';
@@ -859,7 +902,12 @@ async function showResults(){
   cachedRows=null; // invalidate cache
 }
 
-function backToHome(){$('game-screen').classList.remove('map-mode');showScreen('home-screen');refreshHome();}
+function backToHome(){
+  $('game-screen').classList.remove('map-mode');
+  $('main-header').style.zIndex='50';
+  showScreen('home-screen');
+  refreshHome();
+}
 function replayGame(){startGame(mode);}
 
 // ══ INIT ═════════════════════════════════════════════════════════════

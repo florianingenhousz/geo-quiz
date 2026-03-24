@@ -117,8 +117,8 @@ header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2p
 .question-text{font-family:'Playfair Display',serif;font-size:clamp(15px,3.5vw,21px);font-weight:700;line-height:1.3;}
 .question-hint{font-size:12px;color:#999;margin-top:3px;}
 
-#map-wrap{width:100%;background:var(--ocean);border:3px solid var(--ink);border-radius:5px;overflow:hidden;box-shadow:3px 3px 0 var(--soft);touch-action:none;}
-#map-wrap svg{display:block;width:100%;height:auto;cursor:grab;}
+#map-wrap{width:100%;background:var(--ocean);border:3px solid var(--ink);border-radius:5px;overflow:hidden;box-shadow:3px 3px 0 var(--soft);}
+#map-wrap svg{display:block;width:100%;height:auto;cursor:grab;touch-action:none;}
 #map-wrap svg:active{cursor:grabbing;}
 .country{fill:#c4dab8;stroke:white;stroke-width:.3;}
 .country.clickable{cursor:pointer;}
@@ -127,6 +127,70 @@ header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2p
 .map-loader{display:flex;align-items:center;justify-content:center;height:150px;font-size:13px;color:#888;gap:8px;}
 .spinner{width:18px;height:18px;border:3px solid var(--soft);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── MAP FULLSCREEN mobile ── */
+@media(max-width:640px){
+  #game-screen.map-mode{
+    padding:0;gap:0;
+    position:fixed;inset:0;top:58px;
+    z-index:40;background:var(--ocean);
+    overflow:hidden;
+  }
+  #game-screen.map-mode .game-inner{
+    max-width:100%;height:100%;gap:0;
+    position:relative;overflow:hidden;
+  }
+  /* Topbar over map */
+  #game-screen.map-mode .game-top{
+    position:absolute;top:0;left:0;right:0;z-index:20;
+    background:rgba(15,25,35,.85);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    padding:8px 12px;gap:8px;flex-wrap:nowrap;
+  }
+  #game-screen.map-mode .game-mode-label{color:white;font-size:13px;}
+  #game-screen.map-mode .progress-wrap{color:rgba(255,255,255,.65);}
+  #game-screen.map-mode .progress-bar{background:rgba(255,255,255,.2);}
+  #game-screen.map-mode .btn-back{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.85);font-size:11px;padding:4px 10px;}
+
+  /* Question chip under topbar */
+  #game-screen.map-mode .question-box{
+    position:absolute;top:46px;left:10px;right:10px;z-index:20;
+    padding:10px 14px;
+    background:rgba(255,255,255,.96);
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+    border:2px solid var(--ink);border-radius:8px;
+    box-shadow:0 4px 24px rgba(0,0,0,.28);
+  }
+  #game-screen.map-mode .question-text{font-size:14px;}
+  #game-screen.map-mode .question-hint{font-size:11px;}
+
+  /* Map = full canvas */
+  #game-screen.map-mode #map-wrap{
+    position:absolute;inset:0;
+    border:none;border-radius:0;box-shadow:none;
+  }
+  #game-screen.map-mode #map-wrap svg{
+    width:100%;height:100%;
+  }
+
+  /* Feedback floats above btn-next */
+  #game-screen.map-mode .feedback-banner{
+    position:absolute;bottom:68px;left:10px;right:10px;z-index:20;
+    border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.22);
+    display:none;
+  }
+  #game-screen.map-mode .feedback-banner.show{display:flex;}
+
+  /* Next button pinned at bottom */
+  #game-screen.map-mode .btn-next{
+    position:absolute;bottom:10px;left:10px;right:10px;
+    width:auto;z-index:20;
+    border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.3);
+  }
+
+  /* Hide answers grid (map IS the answer input) */
+  #game-screen.map-mode .answers-grid{display:none;}
+}
 
 #flag-display{display:flex;align-items:center;justify-content:center;padding:14px;}
 .flag-img{width:min(180px,55vw);height:auto;border:3px solid var(--ink);border-radius:3px;box-shadow:4px 4px 0 var(--soft);display:block;}
@@ -602,6 +666,8 @@ async function startGame(m){
   };
   questions=pick(COUNTRIES,10).map(c=>({correct:c,options:shuffle([c,...pick(sameRegion(c),3)])}));
   $('game-mode-label').textContent={map:'🗺️ Carte du Monde',flag:'🚩 Drapeaux',capital:'🏛️ Capitales'}[m];
+  // Toggle fullscreen map class
+  $('game-screen').classList.toggle('map-mode', m==='map');
   showScreen('game-screen');
   if(m==='map'&&!worldTopo) await loadTopo();
   renderQ();
@@ -646,64 +712,108 @@ function drawMap(q){
   $('world-svg').style.display='none';
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     const wrap=$('map-wrap');
-    const W=wrap.clientWidth||760, H=Math.round(W*0.56);
-    const svg=d3.select('#world-svg').attr('viewBox',`0 0 ${W} ${H}`);
+    const isMobile=window.innerWidth<=640;
+    const W=wrap.clientWidth||760;
+    const H=isMobile ? window.innerHeight-58 : Math.round(W*0.56);
+    const svg=d3.select('#world-svg')
+      .attr('viewBox',`0 0 ${W} ${H}`)
+      .attr('width',W).attr('height',H);
     svg.selectAll('*').remove();
 
-    const proj=d3.geoNaturalEarth1().scale(W/6.0).translate([W/2,H/2]);
+    const proj=d3.geoNaturalEarth1().scale(isMobile ? H/3.2 : W/6.0).translate([W/2,H/2]);
     const pathFn=d3.geoPath().projection(proj);
     const features=topojson.feature(worldTopo,worldTopo.objects.countries).features;
     const borders=topojson.mesh(worldTopo,worldTopo.objects.countries,(a,b)=>a!==b);
     const corrNum=A3_NUM[q.correct.id];
 
-    // Container group that zoom will transform
     const g=svg.append('g');
-
     g.append('rect').attr('width',W).attr('height',H).attr('fill','#b8d4e8');
+
+    // Track touch start to distinguish tap vs drag
+    let touchStartX=0, touchStartY=0, isDragging=false;
+
+    const handleSelect=(d)=>{
+      if(answered)return;
+      const n=String(d.id).padStart(3,'0'), a3=NUM_A3[n];
+      if(!a3)return;
+      answered=true;
+      const ok=a3===q.correct.id;
+      paths.classed('clickable',false).classed('answered',true);
+      paths.each(function(dd){
+        const nn=String(dd.id).padStart(3,'0');
+        if(nn===corrNum){
+          d3.select(this).style('fill','#27ae60').style('stroke','#1a7a3a').style('stroke-width','1.5px');
+        } else if(nn===n&&!ok){
+          d3.select(this).style('fill','#e84c3d').style('stroke','#b02020').style('stroke-width','1px');
+        } else {
+          d3.select(this).style('fill','#c4dab8').style('stroke','white').style('stroke-width','.3px');
+        }
+      });
+      processResult(ok,q);
+    };
 
     const paths=g.selectAll('.country').data(features).join('path')
       .attr('class','country clickable')
       .attr('fill','#c4dab8')
       .attr('d',pathFn)
-      .on('click touchend',function(event,d){
-        event.preventDefault();
-        if(answered)return;
-        const n=String(d.id).padStart(3,'0'),a3=NUM_A3[n];
-        if(!a3)return;
-        answered=true;
-        const ok=a3===q.correct.id;
-
-        // Use style attribute directly so hover CSS cannot override
-        paths.classed('clickable',false).classed('answered',true);
-        paths.each(function(dd){
-          const nn=String(dd.id).padStart(3,'0');
-          if(nn===corrNum){
-            d3.select(this).style('fill','#27ae60').style('stroke','#1a7a3a').style('stroke-width','1.2px');
-          } else if(nn===n&&!ok){
-            d3.select(this).style('fill','#e84c3d').style('stroke','#b02020').style('stroke-width','1px');
-          } else {
-            d3.select(this).style('fill','#c4dab8');
-          }
-        });
-        processResult(ok,q);
+      // Desktop click
+      .on('click', function(event,d){
+        // On touch devices, click fires after touchend — skip it, we handle via touchend
+        if(event.sourceEvent && event.sourceEvent.type==='touchend') return;
+        if(isDragging) return;
+        handleSelect(d);
+      })
+      // Touch: record start position
+      .on('touchstart', function(event){
+        const t=event.touches[0];
+        touchStartX=t.clientX; touchStartY=t.clientY;
+        isDragging=false;
+      }, {passive:true})
+      // Touch: detect drag
+      .on('touchmove', function(event){
+        const t=event.touches[0];
+        const dx=t.clientX-touchStartX, dy=t.clientY-touchStartY;
+        if(Math.sqrt(dx*dx+dy*dy)>8) isDragging=true;
+      }, {passive:true})
+      // Touch: only fire select if it was a real tap (not a drag)
+      .on('touchend', function(event,d){
+        if(isDragging) return;
+        event.preventDefault(); // prevent ghost click
+        handleSelect(d);
       });
 
-    g.append('path').datum(borders).attr('fill','none').attr('stroke','white').attr('stroke-width',.3).attr('d',pathFn);
+    g.append('path').datum(borders).attr('fill','none').attr('stroke','white').attr('stroke-width',.35).attr('d',pathFn);
 
-    // ── D3 Zoom ──
-    const zoom=d3.zoom()
-      .scaleExtent([1,8])
-      .translateExtent([[0,0],[W,H]])
-      .on('zoom',e=>g.attr('transform',e.transform));
-    svg.call(zoom);
-
-    // Hint text
     g.append('text')
-      .attr('x',W-6).attr('y',H-6)
+      .attr('x',W-6).attr('y',H-5)
       .attr('text-anchor','end')
       .attr('font-size','9px')
-      .attr('fill','rgba(255,255,255,.5)')
-      .text('Pincer pour zoomer');
+      .attr('fill','rgba(255,255,255,.45)')
+      .attr('pointer-events','none')
+      .text('Pincer pour zoomer · Glisser pour naviguer');
+
+    // D3 zoom — attached to SVG, transforms the g group
+    const zoom=d3.zoom()
+      .scaleExtent([1,10])
+      .translateExtent([[0,0],[W,H]])
+      .filter(event=>{
+        // Allow wheel, pinch (touch with 2 fingers), but NOT single-finger touch pan
+        // (single finger is reserved for country selection)
+        if(event.type==='touchstart') return event.touches.length>=2;
+        if(event.type==='touchmove') return event.touches.length>=2;
+        if(event.type==='touchend') return false;
+        return !event.button; // mouse wheel / drag with mouse
+      })
+      .on('zoom', e=>{
+        g.attr('transform', e.transform);
+        // Thinner borders when zoomed in
+        const k=e.transform.k;
+        g.selectAll('.country').style('stroke-width', (0.3/k)+'px');
+        g.select('path:last-of-type').attr('stroke-width', 0.35/k);
+      });
+
+    svg.call(zoom)
+      .on('dblclick.zoom', null); // disable double-click zoom to avoid mis-taps
 
     $('map-loader').style.display='none';
     $('world-svg').style.display='block';
@@ -770,7 +880,7 @@ async function showResults(){
   cachedRows=null; // invalidate cache
 }
 
-function backToHome(){showScreen('home-screen');refreshHome();}
+function backToHome(){$('game-screen').classList.remove('map-mode');showScreen('home-screen');refreshHome();}
 function replayGame(){startGame(mode);}
 
 // ══ INIT ═════════════════════════════════════════════════════════════

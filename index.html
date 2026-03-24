@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GéoMonde</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -117,11 +117,13 @@ header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2p
 .question-text{font-family:'Playfair Display',serif;font-size:clamp(15px,3.5vw,21px);font-weight:700;line-height:1.3;}
 .question-hint{font-size:12px;color:#999;margin-top:3px;}
 
-#map-wrap{width:100%;background:var(--ocean);border:3px solid var(--ink);border-radius:5px;overflow:hidden;box-shadow:3px 3px 0 var(--soft);}
-#map-wrap svg{display:block;width:100%;height:auto;}
-.country{fill:#c4dab8;stroke:white;stroke-width:.3;transition:fill .12s;}
+#map-wrap{width:100%;background:var(--ocean);border:3px solid var(--ink);border-radius:5px;overflow:hidden;box-shadow:3px 3px 0 var(--soft);touch-action:none;}
+#map-wrap svg{display:block;width:100%;height:auto;cursor:grab;}
+#map-wrap svg:active{cursor:grabbing;}
+.country{fill:#c4dab8;stroke:white;stroke-width:.3;}
 .country.clickable{cursor:pointer;}
 .country.clickable:hover{fill:#e8c84a;}
+.country.answered{pointer-events:none;}
 .map-loader{display:flex;align-items:center;justify-content:center;height:150px;font-size:13px;color:#888;gap:8px;}
 .spinner{width:18px;height:18px;border:3px solid var(--soft);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -606,7 +608,7 @@ async function startGame(m){
 }
 
 async function loadTopo(){
-  const r=await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  const r=await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json');
   worldTopo=await r.json();
 }
 
@@ -644,32 +646,65 @@ function drawMap(q){
   $('world-svg').style.display='none';
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     const wrap=$('map-wrap');
-    const W=wrap.clientWidth||760, H=Math.round(W*0.5);
+    const W=wrap.clientWidth||760, H=Math.round(W*0.56);
     const svg=d3.select('#world-svg').attr('viewBox',`0 0 ${W} ${H}`);
     svg.selectAll('*').remove();
-    const proj=d3.geoNaturalEarth1().scale(W/6.3).translate([W/2,H/2]);
+
+    const proj=d3.geoNaturalEarth1().scale(W/6.0).translate([W/2,H/2]);
     const pathFn=d3.geoPath().projection(proj);
     const features=topojson.feature(worldTopo,worldTopo.objects.countries).features;
     const borders=topojson.mesh(worldTopo,worldTopo.objects.countries,(a,b)=>a!==b);
     const corrNum=A3_NUM[q.correct.id];
-    svg.append('rect').attr('width',W).attr('height',H).attr('fill','#b8d4e8');
-    svg.selectAll('.country').data(features).join('path')
-      .attr('class','country clickable').attr('fill','#c4dab8').attr('d',pathFn)
-      .on('click',function(_,d){
+
+    // Container group that zoom will transform
+    const g=svg.append('g');
+
+    g.append('rect').attr('width',W).attr('height',H).attr('fill','#b8d4e8');
+
+    const paths=g.selectAll('.country').data(features).join('path')
+      .attr('class','country clickable')
+      .attr('fill','#c4dab8')
+      .attr('d',pathFn)
+      .on('click touchend',function(event,d){
+        event.preventDefault();
         if(answered)return;
         const n=String(d.id).padStart(3,'0'),a3=NUM_A3[n];
         if(!a3)return;
         answered=true;
         const ok=a3===q.correct.id;
-        svg.selectAll('.country').each(function(dd){
+
+        // Use style attribute directly so hover CSS cannot override
+        paths.classed('clickable',false).classed('answered',true);
+        paths.each(function(dd){
           const nn=String(dd.id).padStart(3,'0');
-          if(nn===corrNum) d3.select(this).attr('fill','var(--correct)');
-          else if(nn===n&&!ok) d3.select(this).attr('fill','var(--wrong)');
-          d3.select(this).classed('clickable',false).style('cursor','default');
+          if(nn===corrNum){
+            d3.select(this).style('fill','#27ae60').style('stroke','#1a7a3a').style('stroke-width','1.2px');
+          } else if(nn===n&&!ok){
+            d3.select(this).style('fill','#e84c3d').style('stroke','#b02020').style('stroke-width','1px');
+          } else {
+            d3.select(this).style('fill','#c4dab8');
+          }
         });
         processResult(ok,q);
       });
-    svg.append('path').datum(borders).attr('fill','none').attr('stroke','white').attr('stroke-width',.3).attr('d',pathFn);
+
+    g.append('path').datum(borders).attr('fill','none').attr('stroke','white').attr('stroke-width',.3).attr('d',pathFn);
+
+    // ── D3 Zoom ──
+    const zoom=d3.zoom()
+      .scaleExtent([1,8])
+      .translateExtent([[0,0],[W,H]])
+      .on('zoom',e=>g.attr('transform',e.transform));
+    svg.call(zoom);
+
+    // Hint text
+    g.append('text')
+      .attr('x',W-6).attr('y',H-6)
+      .attr('text-anchor','end')
+      .attr('font-size','9px')
+      .attr('fill','rgba(255,255,255,.5)')
+      .text('Pincer pour zoomer');
+
     $('map-loader').style.display='none';
     $('world-svg').style.display='block';
   }));

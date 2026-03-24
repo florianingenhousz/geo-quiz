@@ -132,63 +132,52 @@ header{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:2p
 @media(max-width:640px){
   #game-screen.map-mode{
     padding:0;gap:0;
-    position:fixed;inset:0;top:58px;
-    z-index:40;background:var(--ocean);
-    overflow:hidden;
   }
   #game-screen.map-mode .game-inner{
-    max-width:100%;height:100%;gap:0;
-    position:relative;overflow:hidden;
+    max-width:100%;gap:0;
   }
-  /* Topbar over map */
+  /* Compact topbar */
   #game-screen.map-mode .game-top{
-    position:absolute;top:0;left:0;right:0;z-index:20;
-    background:rgba(15,25,35,.85);
-    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    background:var(--ink);
     padding:8px 12px;gap:8px;flex-wrap:nowrap;
   }
   #game-screen.map-mode .game-mode-label{color:white;font-size:13px;}
   #game-screen.map-mode .progress-wrap{color:rgba(255,255,255,.65);}
   #game-screen.map-mode .progress-bar{background:rgba(255,255,255,.2);}
-  #game-screen.map-mode .btn-back{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.85);font-size:11px;padding:4px 10px;}
+  #game-screen.map-mode .btn-back{border-color:rgba(255,255,255,.35);color:rgba(255,255,255,.9);font-size:11px;padding:4px 10px;}
 
-  /* Question chip under topbar */
+  /* Compact question */
   #game-screen.map-mode .question-box{
-    position:absolute;top:46px;left:10px;right:10px;z-index:20;
+    border-left:none;border-right:none;border-top:none;
+    border-radius:0;box-shadow:none;
     padding:10px 14px;
-    background:rgba(255,255,255,.96);
-    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
-    border:2px solid var(--ink);border-radius:8px;
-    box-shadow:0 4px 24px rgba(0,0,0,.28);
+    background:var(--paper);
   }
-  #game-screen.map-mode .question-text{font-size:14px;}
+  #game-screen.map-mode .question-text{font-size:15px;}
   #game-screen.map-mode .question-hint{font-size:11px;}
 
-  /* Map = full canvas */
+  /* Map takes max space — tall */
   #game-screen.map-mode #map-wrap{
-    position:absolute;inset:0;
-    border:none;border-radius:0;box-shadow:none;
+    border-left:none;border-right:none;border-radius:0;box-shadow:none;
+    height:calc(100svh - 300px);
+    min-height:260px;
   }
   #game-screen.map-mode #map-wrap svg{
     width:100%;height:100%;
   }
 
-  /* Feedback floats above btn-next */
+  /* Feedback compact */
   #game-screen.map-mode .feedback-banner{
-    position:absolute;bottom:68px;left:10px;right:10px;z-index:20;
-    border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.22);
-    display:none;
+    border-left:none;border-right:none;border-radius:0;
+    margin:0;
   }
-  #game-screen.map-mode .feedback-banner.show{display:flex;}
 
-  /* Next button pinned at bottom */
+  /* Next button full width, no margin */
   #game-screen.map-mode .btn-next{
-    position:absolute;bottom:10px;left:10px;right:10px;
-    width:auto;z-index:20;
-    border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.3);
+    border-radius:0;margin:0;
   }
 
-  /* Hide answers grid (map IS the answer input) */
+  /* Hide answers grid */
   #game-screen.map-mode .answers-grid{display:none;}
 }
 
@@ -710,17 +699,22 @@ function renderQ(){
 function drawMap(q){
   $('map-loader').style.display='flex';
   $('world-svg').style.display='none';
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+
+  setTimeout(()=>{
     const wrap=$('map-wrap');
     const isMobile=window.innerWidth<=640;
-    const W=wrap.clientWidth||760;
-    const H=isMobile ? window.innerHeight-58 : Math.round(W*0.56);
+    const W=Math.max(wrap.clientWidth||320, 320);
+    const H=isMobile ? wrap.clientHeight||Math.round(window.innerHeight*0.52) : Math.round(W*0.56);
+
     const svg=d3.select('#world-svg')
       .attr('viewBox',`0 0 ${W} ${H}`)
-      .attr('width',W).attr('height',H);
+      .attr('width','100%')
+      .attr('height',H);
     svg.selectAll('*').remove();
 
-    const proj=d3.geoNaturalEarth1().scale(isMobile ? H/3.2 : W/6.0).translate([W/2,H/2]);
+    const proj=d3.geoNaturalEarth1()
+      .scale(isMobile ? Math.min(W,H*2)/3.0 : W/6.0)
+      .translate([W/2, H/2]);
     const pathFn=d3.geoPath().projection(proj);
     const features=topojson.feature(worldTopo,worldTopo.objects.countries).features;
     const borders=topojson.mesh(worldTopo,worldTopo.objects.countries,(a,b)=>a!==b);
@@ -729,7 +723,6 @@ function drawMap(q){
     const g=svg.append('g');
     g.append('rect').attr('width',W).attr('height',H).attr('fill','#b8d4e8');
 
-    // Track touch start to distinguish tap vs drag
     let touchStartX=0, touchStartY=0, isDragging=false;
 
     const handleSelect=(d)=>{
@@ -756,68 +749,53 @@ function drawMap(q){
       .attr('class','country clickable')
       .attr('fill','#c4dab8')
       .attr('d',pathFn)
-      // Desktop click
       .on('click', function(event,d){
-        // On touch devices, click fires after touchend — skip it, we handle via touchend
-        if(event.sourceEvent && event.sourceEvent.type==='touchend') return;
+        if(event.pointerType==='touch') return; // handled by touchend
         if(isDragging) return;
         handleSelect(d);
       })
-      // Touch: record start position
       .on('touchstart', function(event){
+        if(event.touches.length>1) return; // pinch = zoom, ignore
         const t=event.touches[0];
         touchStartX=t.clientX; touchStartY=t.clientY;
         isDragging=false;
       }, {passive:true})
-      // Touch: detect drag
       .on('touchmove', function(event){
+        if(event.touches.length>1){isDragging=true;return;}
         const t=event.touches[0];
         const dx=t.clientX-touchStartX, dy=t.clientY-touchStartY;
-        if(Math.sqrt(dx*dx+dy*dy)>8) isDragging=true;
+        if(Math.sqrt(dx*dx+dy*dy)>10) isDragging=true;
       }, {passive:true})
-      // Touch: only fire select if it was a real tap (not a drag)
       .on('touchend', function(event,d){
         if(isDragging) return;
-        event.preventDefault(); // prevent ghost click
+        event.preventDefault();
         handleSelect(d);
       });
 
-    g.append('path').datum(borders).attr('fill','none').attr('stroke','white').attr('stroke-width',.35).attr('d',pathFn);
+    g.append('path').datum(borders)
+      .attr('fill','none').attr('stroke','white').attr('stroke-width',.35).attr('d',pathFn);
 
-    g.append('text')
-      .attr('x',W-6).attr('y',H-5)
-      .attr('text-anchor','end')
-      .attr('font-size','9px')
-      .attr('fill','rgba(255,255,255,.45)')
-      .attr('pointer-events','none')
-      .text('Pincer pour zoomer · Glisser pour naviguer');
-
-    // D3 zoom — attached to SVG, transforms the g group
     const zoom=d3.zoom()
-      .scaleExtent([1,10])
+      .scaleExtent([1,12])
       .translateExtent([[0,0],[W,H]])
       .filter(event=>{
-        // Allow wheel, pinch (touch with 2 fingers), but NOT single-finger touch pan
-        // (single finger is reserved for country selection)
+        if(event.type==='wheel') return true;
         if(event.type==='touchstart') return event.touches.length>=2;
         if(event.type==='touchmove') return event.touches.length>=2;
         if(event.type==='touchend') return false;
-        return !event.button; // mouse wheel / drag with mouse
+        return !event.button;
       })
       .on('zoom', e=>{
         g.attr('transform', e.transform);
-        // Thinner borders when zoomed in
         const k=e.transform.k;
-        g.selectAll('.country').style('stroke-width', (0.3/k)+'px');
-        g.select('path:last-of-type').attr('stroke-width', 0.35/k);
+        paths.style('stroke-width',(0.3/k)+'px');
       });
 
-    svg.call(zoom)
-      .on('dblclick.zoom', null); // disable double-click zoom to avoid mis-taps
+    svg.call(zoom).on('dblclick.zoom', null);
 
     $('map-loader').style.display='none';
     $('world-svg').style.display='block';
-  }));
+  }, 50);
 }
 
 function renderBtns(q,fn){
@@ -867,6 +845,7 @@ function showStreak(n){
 }
 
 async function showResults(){
+  $('game-screen').classList.remove('map-mode');
   showScreen('result-screen');
   const p=Math.round(score/10*100);
   $('res-pct').textContent=p+'%';
